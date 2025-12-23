@@ -1,0 +1,36 @@
+pipeline {
+    agent any
+      label 'Built-In' 
+    }      
+    stages {
+        stage('Backup Jenkins Home') {
+            steps {
+                sh '''
+                #!/bin/bash
+                # Create a timestamped backup file name
+                BACKUP_FILE="/backups/jenkins-backup-$(date +%Y%m%d%H%M%S).tar.gz"
+                # Archive the entire JENKINS_HOME directory
+                ZIP -r JenkinsBacup.zip jenkins
+                echo "Created backup: $BACKUP_FILE"
+                '''
+            }
+        }
+        stage('Store Backup into s3') {
+            steps {
+              script{
+                s3Upload consoleLogLevel: 'INFO', dontSetBuildResultOnFailure: false, dontWaitForConcurrentBuildCompletion: false, entries: [[bucket: 'bacup-iit-jenkins', excludedFile: '', flatten: false, gzipFiles: false, keepForever: false, managedArtifacts: false, noUploadOnFailure: false, selectedRegion: 'us-east-1', showDirectlyInBrowser: false, sourceFile: '/bin/bash/JenkinsBacup.zip', storageClass: 'STANDARD', uploadFromSlave: false, useServerSideEncryption: false]], pluginFailureResultConstraint: 'FAILURE', profileName: 's3bacup', userMetadata: []
+            }
+        }
+        stage('Cleanup') {
+            steps {
+                sh 'rm -f /backups/jenkins-backup-*.tar.gz'
+            }
+        }
+    }
+    post {
+        // Clean up old backup files on the Jenkins server (e.g., delete files older than 7 days)
+        always {
+            sh 'find /backups/jenkins-backup-* -mtime +7 -delete'
+        }
+    }
+}
